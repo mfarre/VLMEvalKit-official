@@ -23,8 +23,9 @@ class SmolVLM(BaseModel):
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
             model_path, torch_dtype=torch.float32, device_map="cuda"
         )
-        # Video Parameters
-        self.nframe = kwargs.get("nframe", 16)  # Number of frames to extract
+        # Video parameters with defaults
+        self.nframe = kwargs.get("nframe", 25)
+        self.fps = kwargs.get("fps", -1)  # Default to using nframe instead of fps
         self.resolution = 384
 
         kwargs_default = {"max_new_tokens": 512, "use_cache": True}
@@ -35,7 +36,7 @@ class SmolVLM(BaseModel):
         )
         torch.cuda.empty_cache()
 
-    def generate_inner(self, message, dataset=None, add_timestamps=False):
+    def generate_inner(self, message, dataset=None, add_timestamps=True):
         if dataset in [
             "MMBench_DEV_EN",
             "MMBench_TEST_EN",
@@ -94,6 +95,9 @@ class SmolVLM(BaseModel):
             "MVBench",
             "MVBench_MP4",
         ]:
+            self.processor.image_processor.size = (384, 384)
+            self.processor.image_processor.do_resize = False
+            self.processor.image_processor.do_image_splitting = False
             formatted_messages, formatted_images = self.build_prompt_video_withtype(
                 message, dataset, add_timestamps=add_timestamps
             )
@@ -356,6 +360,47 @@ class SmolVLM(BaseModel):
 
         return frames
 
+    def resize_and_center_crop_pil(self, image):
+        """
+        Resize and center crop an image using PIL while maintaining aspect ratio.
+
+        Args:
+            image (PIL.Image): Input image (RGB).
+            resolution (int): Target resolution for the square crop.
+
+        Returns:
+            PIL.Image: The resized and center-cropped image.
+        """
+        # Get original dimensions
+        width, height = image.size
+
+        # Calculate new dimensions maintaining aspect ratio
+        if width < height:
+            new_width = self.resolution
+            new_height = int(height * (self.resolution / width))
+        else:
+            new_height = self.resolution
+            new_width = int(width * (self.resolution / height))
+
+        # Resize image
+        image = image.resize((new_width, new_height), Image.BICUBIC)
+
+        # Calculate cropping box
+        left = (new_width - self.resolution) // 2
+        top = (new_height - self.resolution) // 2
+        right = left + self.resolution
+        bottom = top + self.resolution
+
+        # Center crop
+        image = image.crop((left, top, right, bottom))
+
+        return image
+
+    def read_image(self, path):
+        # Open image and convert to RGB
+        jpeg = Image.open(path).convert("RGB")
+        return self.resize_and_center_crop_pil(jpeg)
+
     def read_video(self, video_path, bound=None):
         """Read video frames using decord with proper resize and center crop"""
         from decord import VideoReader, cpu
@@ -384,13 +429,11 @@ class SmolVLM(BaseModel):
 
         video_path = None
         bounds = None
-
         for msg in message:
             if msg["type"] == "video":
                 video_path = msg["value"]
                 bounds = msg.get("bounds")
                 frames, timestamp_ranges = self.read_video(video_path, bounds)
-
                 # Add frames with timestamps if requested
                 for i, frame in enumerate(frames):
                     if add_timestamps:
@@ -398,7 +441,9 @@ class SmolVLM(BaseModel):
                         prompt_parts.append(f"clip from {start_ts}-{end_ts}:")
                     prompt_parts.append("<image>")
                     images.append(frame)
-
+            elif msg["type"] == "image":
+                prompt_parts.append("<image>")
+                images.append(self.read_image(msg["value"]))
             elif msg["type"] == "text":
                 prompt_parts.append(msg["value"].strip())
 
