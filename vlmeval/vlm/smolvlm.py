@@ -95,6 +95,7 @@ class SmolVLM(BaseModel):
             "MVBench",
             "MVBench_MP4",
         ]:
+            print("Selected dataset")
             self.processor.image_processor.size = (384, 384)
             self.processor.image_processor.do_resize = False
             self.processor.image_processor.do_image_splitting = False
@@ -116,7 +117,7 @@ class SmolVLM(BaseModel):
 
         generated_ids = self.model.generate(**inputs, **self.kwargs)
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
         )[0]
 
         return generated_text.strip()
@@ -297,159 +298,165 @@ class SmolVLM(BaseModel):
 
         generated_ids = self.model.generate(**inputs, **self.kwargs)
         generated_text = self.processor.batch_decode(
-            generated_ids[:, inputs["input_ids"].size(1):], skip_special_tokens=True
+            generated_ids[:, inputs["input_ids"].size(1) :], skip_special_tokens=True
         )[0]
 
         return generated_text.strip()
 
-    def get_index_with_timestamps(self, bound, fps, max_frame, first_idx=0):
-        """Calculate frame indices and their timestamp ranges"""
-        if bound:
-            start, end = bound[0], bound[1]
-        else:
-            start, end = -100000, 100000
-        start_idx = max(first_idx, round(start * fps))
-        end_idx = min(round(end * fps), max_frame)
-        seg_size = float(end_idx - start_idx) / self.nframe
-
-        frame_indices = []
-        timestamp_ranges = []
-
-        for idx in range(self.nframe):
-            # Frame index
-            frame_idx = int(start_idx + (seg_size / 2) + np.round(seg_size * idx))
-            frame_indices.append(frame_idx)
-
-            # Time range for this frame
-            seg_start = frame_idx / fps
-            seg_end = min((frame_idx + seg_size) / fps, end)
-
-            # Convert to MM:SS format
-            start_mm = int(seg_start // 60)
-            start_ss = int(seg_start % 60)
-            end_mm = int(seg_end // 60)
-            end_ss = int(seg_end % 60)
-
-            timestamp_ranges.append(
-                (f"{start_mm:02d}:{start_ss:02d}", f"{end_mm:02d}:{end_ss:02d}")
-            )
-
-        return np.array(frame_indices), timestamp_ranges
-
-    def resize_and_center_crop(self, frames):
-        """Resize and center crop video frames while maintaining aspect ratio"""
-        N, C, H, W = frames.shape
-
-        # Calculate new size maintaining aspect ratio
-        if W < H:
-            new_W = self.resolution
-            new_H = int(H * (self.resolution / W))
-        else:
-            new_H = self.resolution
-            new_W = int(W * (self.resolution / H))
-
-        # Resize maintaining aspect ratio
-        frames = torch.nn.functional.interpolate(
-            frames, size=(new_H, new_W), mode="bicubic", align_corners=False
-        )
-
-        # Center crop
-        left = (new_W - self.resolution) // 2
-        top = (new_H - self.resolution) // 2
-        frames = frames[..., top:top + self.resolution, left:left + self.resolution]
-
-        return frames
-
-    def resize_and_center_crop_pil(self, image):
-        """
-        Resize and center crop an image using PIL while maintaining aspect ratio.
-
-        Args:
-            image (PIL.Image): Input image (RGB).
-            resolution (int): Target resolution for the square crop.
-
-        Returns:
-            PIL.Image: The resized and center-cropped image.
-        """
-        # Get original dimensions
-        width, height = image.size
-
-        # Calculate new dimensions maintaining aspect ratio
-        if width < height:
-            new_width = self.resolution
-            new_height = int(height * (self.resolution / width))
-        else:
-            new_height = self.resolution
-            new_width = int(width * (self.resolution / height))
-
-        # Resize image
-        image = image.resize((new_width, new_height), Image.BICUBIC)
-
-        # Calculate cropping box
-        left = (new_width - self.resolution) // 2
-        top = (new_height - self.resolution) // 2
-        right = left + self.resolution
-        bottom = top + self.resolution
-
-        # Center crop
-        image = image.crop((left, top, right, bottom))
-
-        return image
-
     def read_image(self, path):
         # Open image and convert to RGB
-        jpeg = Image.open(path).convert("RGB")
-        return self.resize_and_center_crop_pil(jpeg)
+        # jpeg = Image.open(path).convert("RGB")
+        # return self.resize_and_center_crop_pil(jpeg)
+        return Image.open(path).convert("RGB")
 
-    def read_video(self, video_path, bound=None):
-        """Read video frames using decord with proper resize and center crop"""
-        from decord import VideoReader, cpu
+    # def build_prompt_video_withtype(self, message, dataset, add_timestamps=False):
+    #     """Build prompt with optional timestamp ranges"""
+    #     from transformers.image_utils import load_image
+    #     print(f"Message {message} Dataset {dataset}")
+    #     prompt_parts = ["User:"]
+    #     images = []
+    #     timestamps = []
 
-        vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
-        max_frame = len(vr) - 1
-        fps = float(vr.get_avg_fps())
+    #     for msg in message:
+    #         if msg["type"] == "video":
+    #             raise NotImplementedError("Not supported for now")
 
-        frame_indices, timestamp_ranges = self.get_index_with_timestamps(
-            bound, fps, max_frame
-        )
-        frames = vr.get_batch(frame_indices)
-        frames = frames.permute(0, 3, 1, 2)  # NHWC -> NCHW
+    #         elif msg["type"] == "image":
+    #             prompt_parts.append("<image>")
+    #             images.append(self.read_image(msg["value"]))
 
-        # Resize and center crop frames
-        frames = self.resize_and_center_crop(frames)
+    #         elif msg["type"] == "text":
+    #             prompt_parts.append(msg["value"].strip())
 
-        return frames, timestamp_ranges
+    #     if len(images) > self.nframe:
+    #         print(f"We have {len(images)} images and we need to fit it into {self.nframe} frames.")
+
+    #         # Select frame indices to reduce the images to self.nframe
+    #         frame_indices = np.linspace(0, len(images) - 1, self.nframe, dtype=int).tolist()
+
+    #         # Store the selected frames back in the 'images' list
+    #         images = [images[i] for i in frame_indices]
+
+    #         # Create a list of timestamps in mm:ss format
+    #         timestamps = [f"{i // 60:02}:{i % 60:02}" for i in frame_indices]
+
+    #         print("Selected frames:")
+    #         for img, timestamp in zip(images, timestamps):
+    #             print(f"Frame: {img['value']}, Timestamp: {timestamp}")
+
+    #     elif len(images) <= self.nframe and len(images) != 0 :
+    #         # If no reduction is needed, generate timestamps for all images
+    #         timestamps = [f"{i // 60:02}:{i % 60:02}" for i in range(len(images))]
+
+    #         print("No reduction needed. Frames and timestamps:")
+    #         for img, timestamp in zip(images, timestamps):
+    #             print(f"Frame: {img['value']}, Timestamp: {timestamp}")
+
+    #     prompt = " ".join(prompt_parts)
+
+    #     # Format based on dataset type
+    #     if dataset in ["MLVU_MCQ", "MLVU_OpenEnded"]:
+    #         prompt = prompt.replace("Options:", "Choices:")
+    #         prompt = prompt.replace(
+    #             "Please select the correct answer from the options above.",
+    #             "Answer with the letter.",
+    #         )
+    #     elif dataset in [
+    #         "TempCompass_MCQ",
+    #         "TempCompass_Captioning",
+    #         "TempCompass_YorN",
+    #     ]:
+    #         if dataset == "TempCompass_YorN":
+    #             prompt += "\nAnswer yes or no."
+    #         elif dataset == "TempCompass_MCQ":
+    #             prompt = prompt.replace("Options:", "Choices:")
+    #             prompt = prompt.replace(
+    #                 "Please select the correct answer from the options above.",
+    #                 "Answer with the letter.",
+    #             )
+    #     elif dataset in ["MVBench", "MVBench_MP4"]:
+    #         if "Options:" in prompt:
+    #             prompt = prompt.replace("Options:", "Choices:")
+    #             prompt = prompt.replace(
+    #                 "Please select the correct answer from the options above.",
+    #                 "Answer with the letter.",
+    #             )
+
+    #     prompt += "<end_of_utterance>\nAssistant:"
+    #     return prompt, images
 
     def build_prompt_video_withtype(self, message, dataset, add_timestamps=False):
-        """Build prompt with optional timestamp ranges"""
+        """Build prompt with optional timestamp ranges and handle trimming of image blocks"""
         from transformers.image_utils import load_image
 
-        prompt_parts = ["User:"]
-        images = []
+        # print(f"Message {message} Dataset {dataset}")
 
-        video_path = None
-        bounds = None
+        prompt_parts = ["User:"]
+        processed_message = []
+        image_blocks = []
+        images = []
+        timestamps = []
+        nframe = 25  # TODO: check why self.nframe is None at this point of the code
+        # print(f"Num frames max {nframe}")
+        # Group consecutive image blocks
+        current_block = []
         for msg in message:
-            if msg["type"] == "video":
-                video_path = msg["value"]
-                bounds = msg.get("bounds")
-                frames, timestamp_ranges = self.read_video(video_path, bounds)
-                # Add frames with timestamps if requested
-                for i, frame in enumerate(frames):
-                    if add_timestamps:
-                        start_ts, end_ts = timestamp_ranges[i]
-                        prompt_parts.append(f"clip from {start_ts}-{end_ts}:")
-                    prompt_parts.append("<image>")
-                    images.append(frame)
-            elif msg["type"] == "image":
+            if msg["type"] == "image":
+                current_block.append(msg)
+            else:
+                # If we encounter a non-image message and the current block is not empty
+                if current_block:
+                    image_blocks.append(current_block)  # Store the current block
+                    current_block = []  # Reset for the next block
+                processed_message.append(
+                    msg
+                )  # Add the non-image message directly to the processed message
+        if current_block:
+            image_blocks.append(current_block)  # Add the last block if it exists
+
+        # Trim each image block if necessary
+        for block in image_blocks:
+            if len(block) > nframe:
+                print(f"Trimming block of {len(block)} images to {nframe} frames.")
+                frame_indices = np.linspace(
+                    0, len(block) - 1, nframe, dtype=int
+                ).tolist()
+                trimmed_block = [block[i] for i in frame_indices]
+
+                # Generate timestamps for the trimmed block
+                block_timestamps = [f"{i // 60:02}:{i % 60:02}" for i in frame_indices]
+            else:
+                trimmed_block = block
+                block_timestamps = [
+                    f"{i // 60:02}:{i % 60:02}" for i in range(len(block))
+                ]
+
+            images.extend(trimmed_block)
+            timestamps.extend(block_timestamps)
+
+            # Add the trimmed block to the processed message
+            for img, ts in zip(trimmed_block, block_timestamps):
+                ts_str = f"{ts}" if add_timestamps else ""
+                processed_message.append(
+                    {"type": "text", "value": f"Frame from {ts_str}:"}
+                )
+                processed_message.append(img)
+
+        images = []
+        # Rebuild the prompt
+        for msg in processed_message:
+            if msg["type"] == "image":
                 prompt_parts.append("<image>")
-                images.append(self.read_image(msg["value"]))
+                images.append(self.read_image(msg["value"]))  # Load the image
             elif msg["type"] == "text":
                 prompt_parts.append(msg["value"].strip())
 
+        # Combine prompt parts
         prompt = " ".join(prompt_parts)
 
-        # Format based on dataset type
+        # print(prompt_parts)
+
+        # Format prompt based on dataset type
         if dataset in ["MLVU_MCQ", "MLVU_OpenEnded"]:
             prompt = prompt.replace("Options:", "Choices:")
             prompt = prompt.replace(
