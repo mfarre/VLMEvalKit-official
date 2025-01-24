@@ -96,6 +96,7 @@ class SmolVLM(BaseModel):
             "TempCompass_YorN",
             "MVBench",
             "MVBench_MP4",
+            "Video-MME"
         ]:
             print("Selected dataset")
             # self.processor.image_processor.size = (384, 384)
@@ -487,6 +488,15 @@ class SmolVLM(BaseModel):
                     "Please select the correct answer from the options above.",
                     "Answer with the letter.",
                 )
+        elif dataset in ["Video-MME"]:
+            if "Options:" in prompt:
+                prompt = prompt.replace("Options:", "Choices:")
+                prompt = prompt.replace(
+                    "Please select the correct answer from the options above.",
+                    "Answer with the letter.",
+                )
+        else:
+            raise NotImplementedError(f"{dataset} not found")
 
         prompt += "<end_of_utterance>\nAssistant:"
         return prompt, images
