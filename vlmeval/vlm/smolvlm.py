@@ -14,12 +14,14 @@ class SmolVLM(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", **kwargs):
+    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", processor_path=None, **kwargs):
+        if not processor_path:
+            processor_path = model_path
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
-        self.processor = AutoProcessor.from_pretrained(model_path)
+        self.processor = AutoProcessor.from_pretrained(processor_path)
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
             model_path, torch_dtype=torch.float32, device_map="cuda"
         )
@@ -96,8 +98,10 @@ class SmolVLM(BaseModel):
             "MVBench_MP4",
         ]:
             print("Selected dataset")
-            self.processor.image_processor.size = (384, 384)
-            self.processor.image_processor.do_resize = False
+            # self.processor.image_processor.size = (384, 384)
+            # self.processor.image_processor.do_resize = False
+            self.processor.image_processor.size = {"longest_edge": 384}
+            self.processor.image_processor.do_resize = True
             self.processor.image_processor.do_image_splitting = False
             formatted_messages, formatted_images = self.build_prompt_video_withtype(
                 message, dataset, add_timestamps=add_timestamps

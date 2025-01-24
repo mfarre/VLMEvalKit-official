@@ -253,6 +253,9 @@ smolvlm_series = {
     'SmolVLM': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct'),
     'SmolVLM-DPO': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct-DPO'),
     'SmolVLM-Synthetic': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct'),
+    'SmolVLM-checkpoint-v2': partial(SmolVLM, model_path='/fsx/miquel/smolvlmvideo/checkpoints/v2/checkpoint-6690', 
+                                     processor_path = 'HuggingFaceTB/SmolVLM-Instruct'),
+
 }
 
 instructblip_series = {
