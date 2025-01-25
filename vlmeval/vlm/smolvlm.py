@@ -14,7 +14,9 @@ class SmolVLM(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
-    def __init__(self, model_path="HuggingFaceTB/SmolVLM-Instruct", processor_path=None, **kwargs):
+    def __init__(
+        self, model_path="HuggingFaceTB/SmolVLM-Instruct", processor_path=None, **kwargs
+    ):
         if not processor_path:
             processor_path = model_path
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
@@ -96,9 +98,9 @@ class SmolVLM(BaseModel):
             "TempCompass_YorN",
             "MVBench",
             "MVBench_MP4",
-            "Video-MME"
+            "Video-MME",
         ]:
-            print("Selected dataset")
+            # print("Selected dataset")
             # self.processor.image_processor.size = (384, 384)
             # self.processor.image_processor.do_resize = False
             self.processor.image_processor.size = {"longest_edge": 384}
@@ -394,32 +396,60 @@ class SmolVLM(BaseModel):
         """Build prompt with optional timestamp ranges and handle trimming of image blocks"""
         from transformers.image_utils import load_image
 
-        # print(f"Message {message} Dataset {dataset}")
+        print(f"RAW MESSAGE {message}")
 
-        prompt_parts = ["User:"]
-        processed_message = []
+        prompt_parts = []  # Remove "User:" since we'll add specific prefixes
         image_blocks = []
         images = []
-        timestamps = []
-        nframe = 25  # TODO: check why self.nframe is None at this point of the code
-        # print(f"Num frames max {nframe}")
-        # Group consecutive image blocks
+        nframe = 25
+
+        # Find system message first
+        system_message = next(
+            (
+                msg
+                for msg in message
+                if msg["type"] == "text" and msg.get("role") == "system"
+            ),
+            None,
+        )
+
+        # Add system message with proper format if it exists
+        if system_message:
+            prompt_parts.extend(
+                ["System:", system_message["value"], "<end_of_utterance>"]
+            )
+        else:
+            # Adding default system message
+            prompt_parts.extend(
+                [
+                    "System:",
+                    "pay attention to the video and answer the question",
+                    "<end_of_utterance>",
+                ]
+            )
+        # Add User: prefix and "Here is the video:"
+        prompt_parts.extend(["User:", "Here is the video:\n"])
+
+        # Process image blocks
+        text_messages = []
         current_block = []
+
         for msg in message:
             if msg["type"] == "image":
                 current_block.append(msg)
             else:
-                # If we encounter a non-image message and the current block is not empty
                 if current_block:
-                    image_blocks.append(current_block)  # Store the current block
-                    current_block = []  # Reset for the next block
-                processed_message.append(
-                    msg
-                )  # Add the non-image message directly to the processed message
-        if current_block:
-            image_blocks.append(current_block)  # Add the last block if it exists
+                    image_blocks.append(current_block)
+                    current_block = []
+                if (
+                    msg.get("role") != "system"
+                ):  # Skip system message as it's already added
+                    text_messages.append(msg)
 
-        # Trim each image block if necessary
+        if current_block:
+            image_blocks.append(current_block)
+
+        # Process image blocks with trimming
         for block in image_blocks:
             if len(block) > nframe:
                 print(f"Trimming block of {len(block)} images to {nframe} frames.")
@@ -427,8 +457,6 @@ class SmolVLM(BaseModel):
                     0, len(block) - 1, nframe, dtype=int
                 ).tolist()
                 trimmed_block = [block[i] for i in frame_indices]
-
-                # Generate timestamps for the trimmed block
                 block_timestamps = [f"{i // 60:02}:{i % 60:02}" for i in frame_indices]
             else:
                 trimmed_block = block
@@ -436,30 +464,20 @@ class SmolVLM(BaseModel):
                     f"{i // 60:02}:{i % 60:02}" for i in range(len(block))
                 ]
 
-            images.extend(trimmed_block)
-            timestamps.extend(block_timestamps)
-
-            # Add the trimmed block to the processed message
             for img, ts in zip(trimmed_block, block_timestamps):
                 ts_str = f"{ts}" if add_timestamps else ""
-                processed_message.append(
-                    {"type": "text", "value": f"Frame from {ts_str}:"}
-                )
-                processed_message.append(img)
+                prompt_parts.extend([f"Frame from {ts_str}:", "<image>"])
+                images.append(self.read_image(img["value"]))
 
-        images = []
-        # Rebuild the prompt
-        for msg in processed_message:
-            if msg["type"] == "image":
-                prompt_parts.append("<image>")
-                images.append(self.read_image(msg["value"]))  # Load the image
-            elif msg["type"] == "text":
-                prompt_parts.append(msg["value"].strip())
+        # Add remaining text and final format
+        for msg in text_messages:
+            prompt_parts.append(msg["value"].strip())
+
+        prompt_parts.append("<end_of_utterance>")
+        prompt_parts.append("\nAssistant:")
 
         # Combine prompt parts
         prompt = " ".join(prompt_parts)
-
-        # print(prompt_parts)
 
         # Format prompt based on dataset type
         if dataset in ["MLVU_MCQ", "MLVU_OpenEnded"]:
@@ -485,9 +503,10 @@ class SmolVLM(BaseModel):
             if "Options:" in prompt:
                 prompt = prompt.replace("Options:", "Choices:")
                 prompt = prompt.replace(
-                    "Please select the correct answer from the options above.",
-                    "Answer with the letter.",
+                    "Only give the best option.",
+                    "\nAnswer with the letter.",
                 )
+                prompt = prompt.replace("Best option:(", "Answer:")
         elif dataset in ["Video-MME"]:
             if "Options:" in prompt:
                 prompt = prompt.replace("Options:", "Choices:")
@@ -498,7 +517,8 @@ class SmolVLM(BaseModel):
         else:
             raise NotImplementedError(f"{dataset} not found")
 
-        prompt += "<end_of_utterance>\nAssistant:"
+        # prompt += "<end_of_utterance>\nAssistant:"
+        print(f"PROMPT {prompt}")
         return prompt, images
 
     def message_to_promptvideo(self, message):
