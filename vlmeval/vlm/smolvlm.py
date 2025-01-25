@@ -316,87 +316,11 @@ class SmolVLM(BaseModel):
         # return self.resize_and_center_crop_pil(jpeg)
         return Image.open(path).convert("RGB")
 
-    # def build_prompt_video_withtype(self, message, dataset, add_timestamps=False):
-    #     """Build prompt with optional timestamp ranges"""
-    #     from transformers.image_utils import load_image
-    #     print(f"Message {message} Dataset {dataset}")
-    #     prompt_parts = ["User:"]
-    #     images = []
-    #     timestamps = []
-
-    #     for msg in message:
-    #         if msg["type"] == "video":
-    #             raise NotImplementedError("Not supported for now")
-
-    #         elif msg["type"] == "image":
-    #             prompt_parts.append("<image>")
-    #             images.append(self.read_image(msg["value"]))
-
-    #         elif msg["type"] == "text":
-    #             prompt_parts.append(msg["value"].strip())
-
-    #     if len(images) > self.nframe:
-    #         print(f"We have {len(images)} images and we need to fit it into {self.nframe} frames.")
-
-    #         # Select frame indices to reduce the images to self.nframe
-    #         frame_indices = np.linspace(0, len(images) - 1, self.nframe, dtype=int).tolist()
-
-    #         # Store the selected frames back in the 'images' list
-    #         images = [images[i] for i in frame_indices]
-
-    #         # Create a list of timestamps in mm:ss format
-    #         timestamps = [f"{i // 60:02}:{i % 60:02}" for i in frame_indices]
-
-    #         print("Selected frames:")
-    #         for img, timestamp in zip(images, timestamps):
-    #             print(f"Frame: {img['value']}, Timestamp: {timestamp}")
-
-    #     elif len(images) <= self.nframe and len(images) != 0 :
-    #         # If no reduction is needed, generate timestamps for all images
-    #         timestamps = [f"{i // 60:02}:{i % 60:02}" for i in range(len(images))]
-
-    #         print("No reduction needed. Frames and timestamps:")
-    #         for img, timestamp in zip(images, timestamps):
-    #             print(f"Frame: {img['value']}, Timestamp: {timestamp}")
-
-    #     prompt = " ".join(prompt_parts)
-
-    #     # Format based on dataset type
-    #     if dataset in ["MLVU_MCQ", "MLVU_OpenEnded"]:
-    #         prompt = prompt.replace("Options:", "Choices:")
-    #         prompt = prompt.replace(
-    #             "Please select the correct answer from the options above.",
-    #             "Answer with the letter.",
-    #         )
-    #     elif dataset in [
-    #         "TempCompass_MCQ",
-    #         "TempCompass_Captioning",
-    #         "TempCompass_YorN",
-    #     ]:
-    #         if dataset == "TempCompass_YorN":
-    #             prompt += "\nAnswer yes or no."
-    #         elif dataset == "TempCompass_MCQ":
-    #             prompt = prompt.replace("Options:", "Choices:")
-    #             prompt = prompt.replace(
-    #                 "Please select the correct answer from the options above.",
-    #                 "Answer with the letter.",
-    #             )
-    #     elif dataset in ["MVBench", "MVBench_MP4"]:
-    #         if "Options:" in prompt:
-    #             prompt = prompt.replace("Options:", "Choices:")
-    #             prompt = prompt.replace(
-    #                 "Please select the correct answer from the options above.",
-    #                 "Answer with the letter.",
-    #             )
-
-    #     prompt += "<end_of_utterance>\nAssistant:"
-    #     return prompt, images
-
     def build_prompt_video_withtype(self, message, dataset, add_timestamps=False):
         """Build prompt with optional timestamp ranges and handle trimming of image blocks"""
         from transformers.image_utils import load_image
 
-        print(f"RAW MESSAGE {message}")
+        # print(f"RAW MESSAGE {message}")
 
         prompt_parts = []  # Remove "User:" since we'll add specific prefixes
         image_blocks = []
@@ -416,7 +340,7 @@ class SmolVLM(BaseModel):
         # Add system message with proper format if it exists
         if system_message:
             prompt_parts.extend(
-                ["System:", system_message["value"], "<end_of_utterance>"]
+                ["System:", system_message["value"], "<end_of_utterance>\n"]
             )
         else:
             # Adding default system message
@@ -424,11 +348,11 @@ class SmolVLM(BaseModel):
                 [
                     "System:",
                     "pay attention to the video and answer the question",
-                    "<end_of_utterance>",
+                    "<end_of_utterance>\n",
                 ]
             )
         # Add User: prefix and "Here is the video:"
-        prompt_parts.extend(["User:", "Here is the video:\n"])
+        prompt_parts.extend(["User:", "Here are some frames sampled from a video:\n"])
 
         # Process image blocks
         text_messages = []
@@ -463,11 +387,11 @@ class SmolVLM(BaseModel):
                 block_timestamps = [
                     f"{i // 60:02}:{i % 60:02}" for i in range(len(block))
                 ]
-
             for img, ts in zip(trimmed_block, block_timestamps):
                 ts_str = f"{ts}" if add_timestamps else ""
                 prompt_parts.extend([f"Frame from {ts_str}:", "<image>"])
                 images.append(self.read_image(img["value"]))
+            prompt_parts.append("\n")
 
         # Add remaining text and final format
         for msg in text_messages:
@@ -481,11 +405,11 @@ class SmolVLM(BaseModel):
 
         # Format prompt based on dataset type
         if dataset in ["MLVU_MCQ", "MLVU_OpenEnded"]:
-            prompt = prompt.replace("Options:", "Choices:")
             prompt = prompt.replace(
-                "Please select the correct answer from the options above.",
-                "Answer with the letter.",
+                "Options:",
+                "respond ONLY with one of the multiple choice letter options (A/B/C/D):",
             )
+
         elif dataset in [
             "TempCompass_MCQ",
             "TempCompass_Captioning",
@@ -501,10 +425,9 @@ class SmolVLM(BaseModel):
                 )
         elif dataset in ["MVBench", "MVBench_MP4"]:
             if "Options:" in prompt:
-                prompt = prompt.replace("Options:", "Choices:")
                 prompt = prompt.replace(
-                    "Only give the best option.",
-                    "\nAnswer with the letter.",
+                    "Options:",
+                    "respond ONLY with one of the multiple choice letter options (A/B/C/D):",
                 )
                 prompt = prompt.replace("Best option:(", "Answer:")
         elif dataset in ["Video-MME"]:
