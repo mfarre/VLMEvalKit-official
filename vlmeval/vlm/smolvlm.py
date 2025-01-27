@@ -15,20 +15,29 @@ class SmolVLM(BaseModel):
     INTERLEAVE = True
 
     def __init__(
-        self, model_path="HuggingFaceTB/SmolVLM-Instruct", processor_path=None, **kwargs
+        self,
+        model_path="HuggingFaceTB/SmolVLM-Instruct",
+        checkpoint_path=None,
+        sampling_frames=None,
+        **kwargs,
     ):
-        if not processor_path:
-            processor_path = model_path
+        self.sampling_frames = sampling_frames
         from transformers import AutoProcessor, Idefics3ForConditionalGeneration
 
         assert osp.exists(model_path) or splitlen(model_path) == 2
 
-        self.processor = AutoProcessor.from_pretrained(processor_path)
+        if checkpoint_path is None:
+            checkpoint_path = model_path
+        print(
+            f"Checkpoint path set to {checkpoint_path} and Frame sampling to {sampling_frames}"
+        )
+
+        self.processor = AutoProcessor.from_pretrained(model_path)
         self.model = Idefics3ForConditionalGeneration.from_pretrained(
-            model_path, torch_dtype=torch.float32, device_map="cuda"
+            checkpoint_path, torch_dtype=torch.float32, device_map="cuda"
         )
         # Video parameters with defaults
-        self.nframe = kwargs.get("nframe", 25)
+        # self.nframe = kwargs.get("nframe", 25)
         self.fps = kwargs.get("fps", -1)  # Default to using nframe instead of fps
         self.resolution = 384
 
@@ -109,6 +118,7 @@ class SmolVLM(BaseModel):
             formatted_messages, formatted_images = self.build_prompt_video_withtype(
                 message, dataset, add_timestamps=add_timestamps
             )
+
         else:
             formatted_messages, formatted_images = self.build_prompt_default(message)
 
@@ -320,12 +330,9 @@ class SmolVLM(BaseModel):
         """Build prompt with optional timestamp ranges and handle trimming of image blocks"""
         from transformers.image_utils import load_image
 
-        # print(f"RAW MESSAGE {message}")
-
         prompt_parts = []  # Remove "User:" since we'll add specific prefixes
         image_blocks = []
         images = []
-        nframe = 25
 
         # Find system message first
         system_message = next(
@@ -375,10 +382,12 @@ class SmolVLM(BaseModel):
 
         # Process image blocks with trimming
         for block in image_blocks:
-            if len(block) > nframe:
-                print(f"\tTrimming block of {len(block)} images to {nframe} frames.")
+            if len(block) > self.sampling_frames:
+                print(
+                    f"\tTrimming block of {len(block)} images to {self.sampling_frames} frames."
+                )
                 frame_indices = np.linspace(
-                    0, len(block) - 1, nframe, dtype=int
+                    0, len(block) - 1, self.sampling_frames, dtype=int
                 ).tolist()
                 trimmed_block = [block[i] for i in frame_indices]
                 block_timestamps = [f"{i // 60:02}:{i % 60:02}" for i in frame_indices]
