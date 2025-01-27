@@ -376,7 +376,7 @@ class SmolVLM(BaseModel):
         # Process image blocks with trimming
         for block in image_blocks:
             if len(block) > nframe:
-                print(f"Trimming block of {len(block)} images to {nframe} frames.")
+                print(f"\tTrimming block of {len(block)} images to {nframe} frames.")
                 frame_indices = np.linspace(
                     0, len(block) - 1, nframe, dtype=int
                 ).tolist()
@@ -441,7 +441,7 @@ class SmolVLM(BaseModel):
             raise NotImplementedError(f"{dataset} not found")
 
         # prompt += "<end_of_utterance>\nAssistant:"
-        print(f"PROMPT {prompt}")
+        # print(f"PROMPT {prompt}")
         return prompt, images
 
     def message_to_promptvideo(self, message):

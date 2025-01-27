@@ -106,12 +106,13 @@ def eval_rule_multi_choice(line):
 
 def eval_rule_YorN(video_llm_output):
     # Extract the yes/no predction from the original video llm output
-    video_llm_output = video_llm_output.lower()
+    video_llm_output = str(video_llm_output).lower()
     if video_llm_output.startswith("yes"):
         return "yes"
     elif video_llm_output.startswith("no"):
         return "no"
     else:
+        print("Returning false")
         return False
 
 

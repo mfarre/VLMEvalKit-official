@@ -9,6 +9,16 @@ from vlmeval.inference_video import infer_data_job_video
 from vlmeval.inference_mt import infer_data_job_mt
 from vlmeval.smp import *
 from vlmeval.utils.result_transfer import MMMU_result_transfer, MMTBench_result_transfer
+from vlmeval.api import OpenAIWrapper
+
+
+def check_openai_api():
+    model = OpenAIWrapper('gpt-4o', verbose=True)
+    try:
+        _, _, resp = model.generate_inner([dict(type='text', value='Hello!')])
+        print("OpenAI API is accessible")
+    except Exception as e:
+        print(f"OpenAI API is not accessible: {e}")
 
 
 def build_model_from_config(cfg, model_name):
@@ -185,6 +195,8 @@ def main():
             backend='nccl',
             timeout=datetime.timedelta(seconds=int(os.environ.get('DIST_TIMEOUT', 3600)))
         )
+
+    check_openai_api()
 
     for _, model_name in enumerate(args.model):
         model = None
