@@ -253,14 +253,7 @@ smolvlm_series = {
     'SmolVLM': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct'),
     'SmolVLM-DPO': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct-DPO'),
     'SmolVLM-Synthetic': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-Instruct'),
-    # 'SmolVLM-checkpoint-v2': partial(SmolVLM, model_path='/fsx/miquel/smolvlmvideo/checkpoints/v2/checkpoint-6690', 
-    #                                  processor_path = 'HuggingFaceTB/SmolVLM-Instruct'),
-    # 'SmolVLM-checkpoint-v2-resizingprocessor': partial(SmolVLM, model_path='/fsx/miquel/smolvlmvideo/checkpoints/v2-resizingprocessor/checkpoint-3345', 
-    #                                 processor_path = 'HuggingFaceTB/SmolVLM-Instruct'),
-    # 'SmolVLM-checkpoint-v3': partial(SmolVLM, model_path='/fsx/miquel/smolvlmvideo/checkpoints/v3/checkpoint-6690', 
-    #                                 processor_path = 'HuggingFaceTB/SmolVLM-Instruct'),
-    # 'SmolVLM-checkpoint-v3-systemprompts': partial(SmolVLM, model_path='/fsx/miquel/smolvlmvideo/checkpoints/v3-systemprompts/checkpoint-6690', 
-    #                                 processor_path = 'HuggingFaceTB/SmolVLM-Instruct'),
+    'SmolVLM2': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-2.2B-Instruct')
 }
 
 instructblip_series = {
