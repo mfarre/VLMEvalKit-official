@@ -451,6 +451,7 @@ class SmolVLM(BaseModel):
 
         # prompt += "<end_of_utterance>\nAssistant:"
         # print(f"PROMPT {prompt}")
+        print(f"{prompt} + Images: {len(images)}")
         return prompt, images
 
     def message_to_promptvideo(self, message):
