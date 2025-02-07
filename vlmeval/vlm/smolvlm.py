@@ -29,7 +29,8 @@ class SmolVLM(BaseModel):
         if checkpoint_path is None:
             checkpoint_path = model_path
         print(
-            f"Checkpoint path set to {checkpoint_path} and Frame sampling to {sampling_frames}"
+            f"Checkpoint path set to {checkpoint_path}, model is {model_path}"
+            f" and Frame sampling is set to {sampling_frames}"
         )
 
         self.processor = AutoProcessor.from_pretrained(model_path)
@@ -39,7 +40,22 @@ class SmolVLM(BaseModel):
         # Video parameters with defaults
         # self.nframe = kwargs.get("nframe", 25)
         self.fps = kwargs.get("fps", -1)  # Default to using nframe instead of fps
-        self.resolution = 384
+        if (
+            model_path == "HuggingFaceTB/SmolVLM-Instruct"
+            or model_path == "HuggingFaceTB/SmolVLM-2.2B-Instruct"
+        ):
+            self.resolution = 384
+        elif (
+            model_path == "HuggingFaceTB/SmolVLM-256M-Instruct"
+            or model_path == "HuggingFaceTB/SmolVLM-500M-Instruct"
+        ):
+            self.resolution = 512
+        else:
+            raise (
+                f"I don't recognize the model {model_path} and I cannot set the frame resolution"
+            )
+
+        print(f"Frame resolution set to {self.resolution}")
 
         kwargs_default = {"max_new_tokens": 512, "use_cache": True}
         kwargs_default.update(kwargs)
@@ -109,10 +125,8 @@ class SmolVLM(BaseModel):
             "MVBench_MP4",
             "Video-MME",
         ]:
-            # print("Selected dataset")
-            # self.processor.image_processor.size = (384, 384)
-            # self.processor.image_processor.do_resize = False
-            self.processor.image_processor.size = {"longest_edge": 384}
+            print(f"Double check: {self.resolution}")
+            self.processor.image_processor.size = {"longest_edge": self.resolution}
             self.processor.image_processor.do_resize = True
             self.processor.image_processor.do_image_splitting = False
             formatted_messages, formatted_images = self.build_prompt_video_withtype(
