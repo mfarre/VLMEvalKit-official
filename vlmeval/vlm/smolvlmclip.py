@@ -8,6 +8,8 @@ import numpy as np
 import sys
 import os
 import math
+from num2words import num2words
+import datetime
 
 sys.path.append("/fsx/miquel/smolvlmvideo")
 
@@ -132,13 +134,29 @@ class SmolVLMClip(BaseModel):
         )
         config.frames_per_clip = self.frames_per_clip
         self.model = SmolLMMForConditionalGeneration.from_pretrained(
-            checkpoint_path, config=config, torch_dtype=torch.float32, device_map="cuda"
+            checkpoint_path,
+            config=config,
+            torch_dtype=torch.bfloat16,
+            device_map="cuda",
         )
 
         # Video parameters
         self.fps = kwargs.get("fps", -1)
-        self.resolution = 384
-
+        if (
+            model_path == "HuggingFaceTB/SmolVLM-Instruct"
+            or model_path == "HuggingFaceTB/SmolVLM-2.2B-Instruct"
+        ):
+            self.resolution = 384
+        elif (
+            model_path == "HuggingFaceTB/SmolVLM-256M-Instruct"
+            or model_path == "HuggingFaceTB/SmolVLM-500M-Instruct"
+        ):
+            self.resolution = 512
+        else:
+            raise (
+                f"I don't recognize the model {model_path} and I cannot set the frame resolution"
+            )
+        print(f"Frame resolution set to {self.resolution}")
         kwargs_default = {"max_new_tokens": 512, "use_cache": True}
         kwargs_default.update(kwargs)
         self.kwargs = kwargs_default
@@ -208,7 +226,8 @@ class SmolVLMClip(BaseModel):
             "Video-MME",
         ]:
             # Configure processor for video input
-            self.processor.image_processor.size = {"longest_edge": 384}
+            print(f"Double check: {self.resolution}")
+            self.processor.image_processor.size = {"longest_edge": self.resolution}
             self.processor.image_processor.do_resize = True
             self.processor.image_processor.do_image_splitting = False
             formatted_messages, formatted_images = self.build_prompt_video_withtype(
@@ -295,13 +314,19 @@ class SmolVLMClip(BaseModel):
             prompt_parts.extend(
                 [
                     "System:",
-                    "pay attention to the video clips and answer the question",
+                    "You are a helpful language and vision assistant. You are able to understand "
+                    "the visual content that the user provides, "
+                    "and assist the user with a variety of tasks using natural language.",
                     "<end_of_utterance>\n",
                 ]
             )
 
         # Add User prefix and video intro
-        prompt_parts.extend(["User:", "Here are some clips sampled from a video:\n"])
+        # prompt_parts.extend(["User:", "Here are some clips sampled from a video:\n"])
+        DEFAULT_VIDEO_INTRO = (
+            "You are provided the following {frame_count} clips sampled"
+            " from a {video_duration} [H:MM:SS] video. The clips:\n"
+        )
 
         # Process image blocks with clip awareness
         text_messages = []
@@ -335,15 +360,26 @@ class SmolVLMClip(BaseModel):
                 video_fps=1.0,  # We're already in frame space
                 max_clips=self.sampling_frames,
             )
-            # print(f"LEN {len(frame_indices)} - Indices: {frame_indices}")
-            # print(f"Blocks {clip_times}")
+
             # Get frames based on computed indices
             trimmed_block = [block[i] for i in frame_indices]
+            prompt_parts.extend(
+                [
+                    "User:",
+                    DEFAULT_VIDEO_INTRO.format(
+                        frame_count=num2words(len(clip_times)),
+                        video_duration=str(datetime.timedelta(seconds=total_frames)),
+                    ),
+                ]
+            )
 
             # Generate timestamps using clip timing information
             block_timestamps = []
             for start_time, end_time in clip_times:
-                timestamp = f"{int(start_time // 60):02d}:{int(start_time % 60):02d}"
+                timestamp = (
+                    f"{int(start_time // 60):02d}:{int(start_time % 60):02d} to "
+                    f"{int(end_time // 60):02d}:{int(end_time % 60):02d}"
+                )
                 block_timestamps.append(timestamp)
 
             # Add frames and timestamps

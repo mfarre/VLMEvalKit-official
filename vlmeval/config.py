@@ -257,7 +257,11 @@ smolvlm_series = {
     'SmolVLM256': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-256M-Instruct'),
     'SmolVLM500': partial(SmolVLM, model_path='HuggingFaceTB/SmolVLM-500M-Instruct'),
     'SmolVLMClip2': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-2.2B-Instruct', frames_per_clip=2),
-    'SmolVLMClip4': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-2.2B-Instruct', frames_per_clip=4)
+    'SmolVLMClip4': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-2.2B-Instruct', frames_per_clip=4),
+    'SmolVLM256Clip2': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-256M-Instruct', frames_per_clip=2),
+    'SmolVLM256Clip4': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-256M-Instruct', frames_per_clip=4),
+    'SmolVLM500Clip2': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-500M-Instruct', frames_per_clip=2),
+    'SmolVLM500Clip4': partial(SmolVLMClip, model_path='HuggingFaceTB/SmolVLM-500M-Instruct', frames_per_clip=4)
 
 }
 
