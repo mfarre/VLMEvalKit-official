@@ -26,6 +26,8 @@ class SmolVLMClip(BaseModel):
         video_fps: float,
         max_clips: int,
     ):
+        # print(f"Frames per clip: {frames_per_clip} Video duration {video_duration}
+        # sampling_fps {sampling_fps} video_fps {video_fps} max_clips {max_clips}")
         tot_frames = int(round(video_duration * video_fps))
         if tot_frames <= 0:
             # No frames to sample
@@ -77,6 +79,7 @@ class SmolVLMClip(BaseModel):
 
         # Flatten
         all_indices = sum(clip_indices, [])
+        print(all_indices)
         return all_indices, timestamps
 
     def sample_clip_indices(
