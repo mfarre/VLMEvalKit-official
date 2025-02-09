@@ -416,7 +416,7 @@ class SmolVLMClip(BaseModel):
             )  # Duration in seconds
 
             # Sample frames using the clip sampling function
-            if not self.sample_clip_indices_even_spacing:
+            if not self.even_clip_sampling_strategy:
                 print("Original sampling strategy")
                 frame_indices, clip_times = self.sample_clip_indices(
                     frames_per_clip=self.frames_per_clip,
