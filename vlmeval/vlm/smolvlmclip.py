@@ -18,6 +18,67 @@ class SmolVLMClip(BaseModel):
     INSTALL_REQ = True
     INTERLEAVE = True
 
+    def sample_clip_indices_even_spacing(
+        self,
+        frames_per_clip: int,
+        video_duration: float,
+        sampling_fps: float,
+        video_fps: float,
+        max_clips: int,
+    ):
+        tot_frames = int(round(video_duration * video_fps))
+        if tot_frames <= 0:
+            # No frames to sample
+            return [], []
+
+        total_needed = frames_per_clip * max_clips
+        threshold_time = total_needed / float(sampling_fps)
+
+        if video_duration <= threshold_time:
+            # STEP-BASED approach at sampling_fps
+            step = video_fps / float(sampling_fps) if sampling_fps > 0 else 1.0
+            step_indices = []
+            idx = 0.0
+            while True:
+                frame_idx = int(round(idx))
+                if frame_idx >= tot_frames:
+                    break
+                step_indices.append(frame_idx)
+                idx += step
+
+            if len(step_indices) >= total_needed:
+                # Keep the first total_needed frames
+                indices = step_indices[:total_needed]
+            else:
+                # Pad the remainder by repeating last
+                needed = total_needed - len(step_indices)
+                indices = step_indices + [step_indices[-1]] * needed
+        else:
+            # UNIFORM approach: produce exactly total_needed frames from [0..tot_frames-1]
+            if tot_frames == 1:
+                # If there's only 1 frame in the video, replicate it
+                indices = [0] * total_needed
+            else:
+                lin = np.linspace(0, tot_frames - 1, total_needed, dtype=np.float32)
+                indices = np.round(lin).astype(int).tolist()
+
+        # Now chunk into `max_clips` each of size `frames_per_clip`
+        # compute timestamps from each chunk's first and last frame index
+        clip_indices = []
+        timestamps = []
+        offset = 0
+        for _ in range(max_clips):
+            chunk = indices[offset : offset + frames_per_clip]
+            offset += frames_per_clip
+            start_time = chunk[0] / float(video_fps)
+            end_time = chunk[-1] / float(video_fps)
+            timestamps.append((start_time, end_time))
+            clip_indices.append(chunk)
+
+        # Flatten
+        all_indices = sum(clip_indices, [])
+        return all_indices, timestamps
+
     def sample_clip_indices(
         self,
         frames_per_clip: int,
@@ -98,8 +159,10 @@ class SmolVLMClip(BaseModel):
         checkpoint_path=None,
         sampling_frames=None,
         frames_per_clip=2,
+        even_clip_sampling_strategy=False,
         **kwargs,
     ):
+        self.even_clip_sampling_strategy = even_clip_sampling_strategy
         self.sampling_frames = sampling_frames
         self.frames_per_clip = frames_per_clip
 
@@ -113,7 +176,7 @@ class SmolVLMClip(BaseModel):
             checkpoint_path = model_path
         print(
             f"Checkpoint path set to {checkpoint_path}, Frame sampling to {sampling_frames}, "
-            f"Frames per clip: {frames_per_clip}"
+            f"Frames per clip: {frames_per_clip} "
             f"Base model: {model_path}"
         )
 
@@ -353,13 +416,24 @@ class SmolVLMClip(BaseModel):
             )  # Duration in seconds
 
             # Sample frames using the clip sampling function
-            frame_indices, clip_times = self.sample_clip_indices(
-                frames_per_clip=self.frames_per_clip,
-                video_duration=block_duration,
-                sampling_fps=1.0,  # Since we're working with frame indices directly
-                video_fps=1.0,  # We're already in frame space
-                max_clips=self.sampling_frames,
-            )
+            if not self.sample_clip_indices_even_spacing:
+                print("Original sampling strategy")
+                frame_indices, clip_times = self.sample_clip_indices(
+                    frames_per_clip=self.frames_per_clip,
+                    video_duration=block_duration,
+                    sampling_fps=1.0,  # Since we're working with frame indices directly
+                    video_fps=1.0,  # We're already in frame space
+                    max_clips=self.sampling_frames,
+                )
+            else:
+                print("Even Clip Sampling strategy")
+                frame_indices, clip_times = self.sample_clip_indices_even_spacing(
+                    frames_per_clip=self.frames_per_clip,
+                    video_duration=block_duration,
+                    sampling_fps=1.0,  # Since we're working with frame indices directly
+                    video_fps=1.0,  # We're already in frame space
+                    max_clips=self.sampling_frames,
+                )
 
             # Get frames based on computed indices
             trimmed_block = [block[i] for i in frame_indices]
